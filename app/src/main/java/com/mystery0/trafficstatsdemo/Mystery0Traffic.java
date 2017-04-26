@@ -1,11 +1,13 @@
 package com.mystery0.trafficstatsdemo;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.ContentObserver;
+import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.TrafficStats;
 import android.os.Handler;
@@ -29,6 +31,7 @@ public class Mystery0Traffic extends LinearLayout
     Runnable mRunnable;
     Handler mTrafficHandler;
     TrafficStats mTrafficStats;
+    private int mNetworkTrafficColor;
     boolean showTraffic;
     float send_speed;
     float received_speed;
@@ -55,7 +58,7 @@ public class Mystery0Traffic extends LinearLayout
         mIntentReceiver = new Mystery0Traffic.Receiver();
         mRunnable = new Mystery0Traffic.Task();    // Some crazy single-line gymnastics to compensate for the smali modifications, which probably also explains why both classes are nameless (they aren't originally instantiated here)
         mHandler = new Handler();
-        mTrafficStats=new TrafficStats();
+        mTrafficStats = new TrafficStats();
         Mystery0Traffic.SettingsObserver settingsObserver = new Mystery0Traffic.SettingsObserver(mHandler);
         settingsObserver.observe();
         updateSettings();
@@ -82,6 +85,12 @@ public class Mystery0Traffic extends LinearLayout
         }
     }
 
+    public void setTextColor(int color)
+    {
+        send.setTextColor(color);
+        received.setTextColor(color);
+    }
+
     @Override
     protected void onAttachedToWindow()
     {
@@ -91,7 +100,7 @@ public class Mystery0Traffic extends LinearLayout
         {
             mAttached = true;
             IntentFilter filter = new IntentFilter();
-            filter.addAction("android.net.conn.CONNECTIVITY_CHANGE");
+            filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
             getContext().registerReceiver(mIntentReceiver, filter, null, getHandler());
         }
         updateSettings();
@@ -122,6 +131,18 @@ public class Mystery0Traffic extends LinearLayout
             setVisibility(View.VISIBLE);
         } else
             setVisibility(View.GONE);
+        if (mNetworkTrafficColor != 0xFFFFFFFF)
+        {
+            if (mNetworkTrafficColor == Integer.MIN_VALUE
+                    || mNetworkTrafficColor == -2)
+            {
+                mNetworkTrafficColor = 0xFFFFFFFF;
+            }
+        } else
+        {
+            mNetworkTrafficColor = Color.BLACK;
+        }
+        setTextColor(mNetworkTrafficColor);
     }
 
     class Receiver extends BroadcastReceiver
@@ -130,13 +151,14 @@ public class Mystery0Traffic extends LinearLayout
         public void onReceive(Context context, Intent intent)
         {
             String action = intent.getAction();
-            if (action.equals("android.net.conn.CONNECTIVITY_CHANGE"))
+            if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION))
             {
                 updateSettings();
             }
         }
     }
 
+    @SuppressLint("HandlerLeak")
     public void updateTraffic()
     {
         mTrafficHandler = new Handler()
