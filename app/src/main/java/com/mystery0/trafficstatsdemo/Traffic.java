@@ -2,6 +2,7 @@ package com.mystery0.trafficstatsdemo;
 
 import java.text.DecimalFormat;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -15,20 +16,21 @@ import android.os.Message;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.TextView;
 
-public class Traffic extends android.support.v7.widget.AppCompatTextView
+public class Traffic extends TextView
 {
-
     private boolean mAttached;
     Handler mHandler;
     private final BroadcastReceiver mIntentReceiver;
     Runnable mRunnable;
-    protected int mTrafficColor;
     Handler mTrafficHandler;
     TrafficStats mTrafficStats;
     boolean showTraffic;
-    float speed;
+    float send_speed;
+    float received_speed;
     float totalRxBytes;
+    float totalTxBytes;
 
     class SettingsObserver extends ContentObserver
     {
@@ -64,7 +66,7 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
     {
         super(context, attrs, defStyle);
         mIntentReceiver = new Receiver();
-        mRunnable = new Task();    // Some crazy single-line gymnastics to compensate for the smali modifications, which probably also explains why both classes are nameless (they aren't originally instantiated here)
+        mRunnable = new Task();
         mHandler = new Handler();
         SettingsObserver settingsObserver = new SettingsObserver(mHandler);
         mTrafficStats = new TrafficStats();
@@ -80,9 +82,8 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
         if (!mAttached)
         {
             mAttached = true;
-            mTrafficColor = getTextColors().getDefaultColor();
             IntentFilter filter = new IntentFilter();
-            filter.addAction("android.net.conn.CONNECTIVITY_CHANGE");
+            filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
             getContext().registerReceiver(mIntentReceiver, filter, null, getHandler());
         }
         updateSettings();
@@ -105,13 +106,14 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
         public void onReceive(Context context, Intent intent)
         {
             String action = intent.getAction();
-            if (action.equals("android.net.conn.CONNECTIVITY_CHANGE"))
+            if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION))
             {
                 updateSettings();
             }
         }
     }
 
+    @SuppressLint("HandlerLeak")
     public void updateTraffic()
     {
         mTrafficHandler = new Handler()
@@ -119,21 +121,32 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
             @Override
             public void handleMessage(Message msg)
             {
-                speed = ((float) (TrafficStats.getTotalRxBytes()) - totalRxBytes) / 1024.0f / 3.0f;    // Speed in KiB/s
-                totalRxBytes = (float) (TrafficStats.getTotalRxBytes());    // The smali uses mTrafficStats to call the method, unnecessary since it's a static one
-                DecimalFormat DecimalFormalism = new DecimalFormat("###0");
-                if ((speed / 1024.0f) >= 1.0f)
-                    setText(DecimalFormalism.format((double) (speed / 1024.0f)) + "MB/s");    // Hooooly crap...
-                else if (speed <= 0.0099)
-                    setText(DecimalFormalism.format((double) (speed * 1024.0f)) + "B/s");
+                send_speed = ((float) (TrafficStats.getTotalTxBytes()) - totalTxBytes) / 1024.0f / 3.0f;
+                received_speed = ((float) (TrafficStats.getTotalRxBytes()) - totalRxBytes) / 1024.0f / 3.0f;
+                totalRxBytes = (float) (TrafficStats.getTotalRxBytes());
+                totalTxBytes = (float) (TrafficStats.getTotalTxBytes());
+                DecimalFormat DecimalFormalism = new DecimalFormat("##0.#");
+                String show_send;
+                String show_received;
+                if ((send_speed / 1024.0f) >= 1.0f)
+                    show_send=DecimalFormalism.format((double) (send_speed / 1024.0f)) + "MB/s ↑";
+                else if (send_speed <= 0.0099)
+                    show_send=DecimalFormalism.format((double) (send_speed * 1024.0f)) + "B/s ↑";
                 else
-                    setText(DecimalFormalism.format((double) speed) + "KB/s");
+                    show_send=DecimalFormalism.format((double) send_speed) + "KB/s ↑";
 
+                if ((received_speed / 1024.0f) >= 1.0f)
+                    show_received=DecimalFormalism.format((double) (received_speed / 1024.0f)) + "MB/s ↓";
+                else if (send_speed <= 0.0099)
+                    show_received=DecimalFormalism.format((double) (received_speed * 1024.0f)) + "B/s ↓";
+                else
+                    show_received=DecimalFormalism.format((double) received_speed) + "KB/s ↓";
+
+                setText(show_send + " " + show_received);
                 update();
                 super.handleMessage(msg);
             }
         };
-        totalRxBytes = (float) TrafficStats.getTotalRxBytes();    // Ergh, this smells like a race condition just waiting to happen... Actually, is this even necessary?
         mTrafficHandler.sendEmptyMessage(0);
     }
 
@@ -141,9 +154,9 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
     {
         try
         {
-            ConnectivityManager connectivityManager = (ConnectivityManager) getContext().getSystemService("connectivity");
+            ConnectivityManager connectivityManager = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
             return connectivityManager.getActiveNetworkInfo().isConnected();
-        } catch (Exception e)
+        } catch (Exception ignored)
         {
         }
 
@@ -153,7 +166,7 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
     public void update()
     {
         mTrafficHandler.removeCallbacks(mRunnable);
-        mTrafficHandler.postDelayed(mRunnable, 3000);    // Poll once every three seconds
+        mTrafficHandler.postDelayed(mRunnable, 1000);
     }
 
     class Task implements Runnable
@@ -168,15 +181,6 @@ public class Traffic extends android.support.v7.widget.AppCompatTextView
     private void updateSettings()
     {
         ContentResolver resolver = getContext().getContentResolver();
-        int newColor = 0;
-
-        newColor = Settings.System.getInt(resolver, "status_bar_traffic_color", mTrafficColor);
-
-        if (newColor < 0 && newColor != mTrafficColor)
-        {
-            mTrafficColor = newColor;
-            setTextColor(mTrafficColor);
-        }
 
         showTraffic = (Settings.System.getInt(resolver, "status_bar_traffic", 1) == 1);
 

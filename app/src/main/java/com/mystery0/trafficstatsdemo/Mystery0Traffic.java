@@ -74,7 +74,7 @@ public class Mystery0Traffic extends LinearLayout
         void observe()
         {
             ContentResolver resolver = getContext().getContentResolver();
-            resolver.registerContentObserver(Settings.System.getUriFor("status_bar_traffic"), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor("Settings.ACTION_NETWORK_SETTINGS"), false, this);
 
         }
 
@@ -121,28 +121,15 @@ public class Mystery0Traffic extends LinearLayout
     {
         ContentResolver resolver = getContext().getContentResolver();
 
-        showTraffic = (Settings.System.getInt(resolver, "status_bar_traffic", 1) == 1);
+        showTraffic = (Settings.System.getInt(resolver, "Settings.ACTION_NETWORK_SETTINGS", 1) == 1);
 
         if (showTraffic && getConnectAvailable())
         {
             if (mAttached)
                 updateTraffic();
-
             setVisibility(View.VISIBLE);
         } else
             setVisibility(View.GONE);
-        if (mNetworkTrafficColor != 0xFFFFFFFF)
-        {
-            if (mNetworkTrafficColor == Integer.MIN_VALUE
-                    || mNetworkTrafficColor == -2)
-            {
-                mNetworkTrafficColor = 0xFFFFFFFF;
-            }
-        } else
-        {
-            mNetworkTrafficColor = Color.BLACK;
-        }
-        setTextColor(mNetworkTrafficColor);
     }
 
     class Receiver extends BroadcastReceiver
@@ -170,7 +157,7 @@ public class Mystery0Traffic extends LinearLayout
                 received_speed = ((float) (mTrafficStats.getTotalRxBytes()) - totalRxBytes) / 1024.0f / 3.0f;
                 totalRxBytes = (float) (mTrafficStats.getTotalRxBytes());
                 totalTxBytes = (float) (mTrafficStats.getTotalTxBytes());
-                DecimalFormat DecimalFormalism = new DecimalFormat("###0");
+                DecimalFormat DecimalFormalism = new DecimalFormat("##0.#");
                 if ((send_speed / 1024.0f) >= 1.0f)
                     send.setText(DecimalFormalism.format((double) (send_speed / 1024.0f)) + "MB/s ↑");
                 else if (send_speed <= 0.0099)
